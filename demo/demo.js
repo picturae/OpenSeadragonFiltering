@@ -1,47 +1,269 @@
 /*
- * This software was developed at the National Institute of Standards and
- * Technology by employees of the Federal Government in the course of
- * their official duties. Pursuant to title 17 Section 105 of the United
- * States Code this software is not subject to copyright protection and is
- * in the public domain. This software is an experimental system. NIST assumes
+ * Modified and maintained by RationAI.
+ *
+ * This software was orignally developed at the National Institute of Standards and
+ * Technology by employees of the Federal Government. NIST assumes
  * no responsibility whatsoever for its use by other parties, and makes no
  * guarantees, expressed or implied, about its quality, reliability, or
- * any other characteristic. We would appreciate acknowledgement if the
- * software is used.
- */
-
-/**
- *
+ * any other characteristic.
  * @author Antoine Vandecreme <antoine.vandecreme@nist.gov>
  */
 
-require('file-loader?name=[name].[ext]!./index.html');
-require('style-loader?name=[name].[ext]!./style.css');
+/**
+ * This class is an improvement over the basic jQuery spinner to support
+ * 'Enter' to update the value (with validity checks).
+ * @param {Object} options Options object
+ * @returns {Spinner} A spinner object
+ */
+class Spinner {
+    /**
+     *
+     */
+    constructor(options) {
+        options.$element.html('<input type="text" size="1" ' +
+            'class="ui-widget-content ui-corner-all"/>');
 
+        const self = this,
+            $spinner = options.$element.find('input');
+        this.value = options.init;
+        $spinner.spinner({
+            min: options.min,
+            max: options.max,
+            step: options.step,
+            spin: function(event, ui) {
+                /*jshint unused:true */
+                self.value = ui.value;
+                options.updateCallback(self.value);
+            }
+        });
+        $spinner.val(this.value);
+        $spinner.keyup(function(e) {
+            if (e.which === 13) {
+                if (!this.value.match(/^-?\d?\.?\d*$/)) {
+                    this.value = options.init;
+                } else if (options.min !== undefined &&
+                    this.value < options.min) {
+                    this.value = options.min;
+                } else if (options.max !== undefined &&
+                    this.value > options.max) {
+                    this.value = options.max;
+                }
+                self.value = this.value;
+                options.updateCallback(self.value);
+            }
+        });
 
-var $ = require('jquery');
-require('webpack-jquery-ui');
-require('webpack-jquery-ui/css');
-var Spinner = require('./spinner');
-var SpinnerSlider = require('./spinner-slider');
+    }
+    /**
+     *
+     */
+    getValue() {
+        return this.value;
+    }
+}
 
-var OpenSeadragon = require('openseadragon');
-require('../openseadragon-filtering');
-var viewer = new OpenSeadragon({
+/**
+ *
+ */
+class SpinnerSlider {
+
+    /**
+     *
+     */
+    constructor(options) {
+        let idIncrement = 0;
+
+        this.hash = idIncrement++;
+
+        const spinnerId = 'wdzt-spinner-slider-spinner-' + this.hash;
+        const sliderId = 'wdzt-spinner-slider-slider-' + this.hash;
+
+        this.value = options.init;
+
+        const self = this;
+
+        options.$element.html(`
+            <div class="wdzt-table-layout wdzt-full-width">
+                <div class="wdzt-row-layout">
+                    <div class="wdzt-cell-layout">
+                        <input id="${spinnerId}" type="text" size="1"
+                               class="ui-widget-content ui-corner-all"/>
+                    </div>
+                    <div class="wdzt-cell-layout wdzt-full-width">
+                        <div id="${sliderId}" class="wdzt-menu-slider">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `);
+
+        const $slider = options.$element.find('#' + sliderId)
+            .slider({
+                min: options.min,
+                max: options.sliderMax !== undefined ?
+                    options.sliderMax : options.max,
+                step: options.step,
+                value: this.value,
+                slide: function (event, ui) {
+                    /*jshint unused:true */
+                    self.value = ui.value;
+                    $spinner.spinner('value', self.value);
+                    options.updateCallback(self.value);
+                }
+            });
+        const $spinner = options.$element.find('#' + spinnerId)
+            .spinner({
+                min: options.min,
+                max: options.max,
+                step: options.step,
+                spin: function (event, ui) {
+                    /*jshint unused:true */
+                    self.value = ui.value;
+                    $slider.slider('value', self.value);
+                    options.updateCallback(self.value);
+                }
+            });
+        $spinner.val(this.value);
+        $spinner.keyup(function (e) {
+            if (e.which === 13) {
+                self.value = $spinner.spinner('value');
+                $slider.slider('value', self.value);
+                options.updateCallback(self.value);
+            }
+        });
+    }
+
+    /**
+     *
+     */
+    getValue () {
+        return this.value;
+    };
+}
+
+/**
+ *
+ */
+class DrawerSwitcher {
+    url = new window.URL(window.location.href);
+    drawers = {
+        canvas: "Context2d drawer (default in OSD &lt;= 4.1.0)",
+        webgl: "New WebGL drawer"
+    };
+    _data = {}
+
+    /**
+     *
+     */
+    addDrawerOption(urlQueryName, title="Select drawer:", defaultDrawerImplementation="canvas") {
+        const drawer = this.url.searchParams.get(urlQueryName) || defaultDrawerImplementation;
+        if (!this.drawers[drawer]) throw "Unsupported drawer implementation: " + drawer;
+
+        this._data[urlQueryName] = {
+            query: urlQueryName,
+            implementation: drawer,
+            title: title
+        };
+    }
+
+    /**
+     *
+     */
+    activeName(urlQueryName) {
+        return this.drawers[this.activeImplementation(urlQueryName)];
+    }
+
+    /**
+     *
+     */
+    activeImplementation(urlQueryName) {
+        return this._data[urlQueryName].implementation;
+    }
+
+    /**
+     *
+     */
+    _getFormData(useNewline=true) {
+        return Object.values(this._data).map(ctx => `${ctx.title}&nbsp;
+<select name="${ctx.query}">
+  ${Object.entries(this.drawers).map(([k, v]) => {
+        const selected = ctx.implementation === k ? "selected" : "";
+        return `<option value="${k}" ${selected}>${v}</option>`;
+    }).join("\n")}
+</select>`).join(useNewline ? "<br>" : "");
+    }
+
+    /**
+     *
+     */
+    _preserveOtherSeachParams() {
+        let res = [], registered = Object.keys(this._data);
+        for (let [k, v] of this.url.searchParams.entries()) {
+            if (!registered.includes(k)) {
+                res.push(`<input name="${k}" type="hidden" value=${v} />`);
+            }
+        }
+        return res.join('\n');
+    }
+
+    /**
+     *
+     */
+    render(selector, useNewline=undefined) {
+        useNewline = typeof useNewline === "boolean" ? useNewline : Object.keys(this._data).length > 1;
+        const html = `<div>
+  <form method="get">
+     ${this._preserveOtherSeachParams()}
+     ${this._getFormData()}${useNewline ? "<br>":""}<button>Submit</button>
+  </form>
+</div>`;
+        if (selector) $(selector).append(html);
+        return html;
+    }
+}
+
+const switcher = new DrawerSwitcher();
+switcher.addDrawerOption("drawer");
+$("#title-drawer").html(switcher.activeName("drawer"));
+switcher.render("#title-banner");
+const sources = {
+    'Highsmith': "https://openseadragon.github.io/example-images/highsmith/highsmith.dzi",
+    'Rainbow Grid': "../../data/testpattern.dzi",
+    'Leaves': "../../data/iiif_2_0_sizes/info.json",
+    "Duomo":"https://openseadragon.github.io/example-images/duomo/duomo.dzi",
+}
+const url = new window.URL(window.location);
+const targetSource = url.searchParams.get("image") || Object.values(sources)[0];
+const viewer = window.viewer = new OpenSeadragon({
     id: 'openseadragon',
-    prefixUrl: 'images/',
-    tileSources: '//openseadragon.github.io/example-images/highsmith/highsmith.dzi',
-    crossOriginPolicy: 'Anonymous'
+    prefixUrl: '/build/openseadragon/images/',
+    tileSources: targetSource,
+    crossOriginPolicy: 'Anonymous',
+    drawer: switcher.activeImplementation("drawer"),
+    showNavigator: true,
+    wrapHorizontal: true,
+    gestureSettingsMouse: {
+        clickToZoom:  false
+    }
 });
+
+$("#image-select")
+    .html(Object.entries(sources).map(([k, v]) =>
+        `<option value="${v}" ${targetSource === v ? "selected" : ""}>${k}</option>`).join("\n"))
+    .on('change', e => {
+        url.searchParams.set('image', e.target.value);
+        window.history.pushState(null, '', url.toString());
+        viewer.addTiledImage({tileSource: e.target.value, index: 0, replace: true});
+    });
+
 
 // Prevent Caman from caching the canvas because without this:
 // 1. We have a memory leak
 // 2. Non-caman filters in between 2 camans filters get ignored.
-var caman = Caman;
-caman.Store.put = function() {};
+Caman.Store.put = function() {};
 
 // List of filters with their templates.
-var availableFilters = [
+const availableFilters = [
     {
         name: 'Invert',
         generate: function() {
@@ -53,14 +275,13 @@ var availableFilters = [
                 getFilter: function() {
                     /*eslint new-cap: 0*/
                     return OpenSeadragon.Filters.INVERT();
-                },
-                sync: true
+                }
             };
         }
     }, {
         name: 'Colormap',
         generate: function(updateCallback) {
-            var cmaps = {
+            const cmaps = {
                 aCm: [ [0,0,0], [0,4,0], [0,8,0], [0,12,0], [0,16,0], [0,20,0], [0,24,0], [0,28,0], [0,32,0], [0,36,0], [0,40,0], [0,44,0], [0,48,0], [0,52,0], [0,56,0], [0,60,0], [0,64,0], [0,68,0], [0,72,0], [0,76,0], [0,80,0], [0,85,0], [0,89,0], [0,93,0], [0,97,0], [0,101,0], [0,105,0], [0,109,0], [0,113,0], [0,117,0], [0,121,0], [0,125,0], [0,129,2], [0,133,5], [0,137,7], [0,141,10], [0,145,13], [0,149,15], [0,153,18], [0,157,21], [0,161,23], [0,165,26], [0,170,29], [0,174,31], [0,178,34], [0,182,37], [0,186,39], [0,190,42], [0,194,45], [0,198,47], [0,202,50], [0,206,53], [0,210,55], [0,214,58], [0,218,61], [0,222,63], [0,226,66], [0,230,69], [0,234,71], [0,238,74], [0,242,77], [0,246,79], [0,250,82], [0,255,85], [3,251,87], [7,247,90], [11,243,92], [15,239,95], [19,235,98], [23,231,100], [27,227,103], [31,223,106], [35,219,108], [39,215,111], [43,211,114], [47,207,116], [51,203,119], [55,199,122], [59,195,124], [63,191,127], [67,187,130], [71,183,132], [75,179,135], [79,175,138], [83,171,140], [87,167,143], [91,163,146], [95,159,148], [99,155,151], [103,151,154], [107,147,156], [111,143,159], [115,139,162], [119,135,164], [123,131,167], [127,127,170], [131,123,172], [135,119,175], [139,115,177], [143,111,180], [147,107,183], [151,103,185], [155,99,188], [159,95,191], [163,91,193], [167,87,196], [171,83,199], [175,79,201], [179,75,204], [183,71,207], [187,67,209], [191,63,212], [195,59,215], [199,55,217], [203,51,220], [207,47,223], [211,43,225], [215,39,228], [219,35,231], [223,31,233], [227,27,236], [231,23,239], [235,19,241], [239,15,244], [243,11,247], [247,7,249], [251,3,252], [255,0,255], [255,0,251], [255,0,247], [255,0,244], [255,0,240], [255,0,237], [255,0,233], [255,0,230], [255,0,226], [255,0,223], [255,0,219], [255,0,216], [255,0,212], [255,0,208], [255,0,205], [255,0,201], [255,0,198], [255,0,194], [255,0,191], [255,0,187], [255,0,184], [255,0,180], [255,0,177], [255,0,173], [255,0,170], [255,0,166], [255,0,162], [255,0,159], [255,0,155], [255,0,152], [255,0,148], [255,0,145], [255,0,141], [255,0,138], [255,0,134], [255,0,131], [255,0,127], [255,0,123], [255,0,119], [255,0,115], [255,0,112], [255,0,108], [255,0,104], [255,0,100], [255,0,96], [255,0,92], [255,0,88], [255,0,85], [255,0,81], [255,0,77], [255,0,73], [255,0,69], [255,0,65], [255,0,61], [255,0,57], [255,0,54], [255,0,50], [255,0,46], [255,0,42], [255,0,38], [255,0,34], [255,0,30], [255,0,27], [255,0,23], [255,0,19], [255,0,15], [255,0,11], [255,0,7], [255,0,3], [255,0,0], [255,4,0], [255,8,0], [255,12,0], [255,17,0], [255,21,0], [255,25,0], [255,30,0], [255,34,0], [255,38,0], [255,43,0], [255,47,0], [255,51,0], [255,56,0], [255,60,0], [255,64,0], [255,69,0], [255,73,0], [255,77,0], [255,82,0], [255,86,0], [255,90,0], [255,95,0], [255,99,0], [255,103,0], [255,108,0], [255,112,0], [255,116,0], [255,121,0], [255,125,0], [255,129,0], [255,133,0], [255,138,0], [255,142,0], [255,146,0], [255,151,0], [255,155,0], [255,159,0], [255,164,0], [255,168,0], [255,172,0], [255,177,0], [255,181,0], [255,185,0], [255,190,0], [255,194,0], [255,198,0], [255,203,0], [255,207,0], [255,211,0], [255,216,0], [255,220,0], [255,224,0], [255,229,0], [255,233,0], [255,237,0], [255,242,0], [255,246,0], [255,250,0], [255,255,0]],
                 bCm: [ [0,0,0], [0,0,4], [0,0,8], [0,0,12], [0,0,16], [0,0,20], [0,0,24], [0,0,28], [0,0,32], [0,0,36], [0,0,40], [0,0,44], [0,0,48], [0,0,52], [0,0,56], [0,0,60], [0,0,64], [0,0,68], [0,0,72], [0,0,76], [0,0,80], [0,0,85], [0,0,89], [0,0,93], [0,0,97], [0,0,101], [0,0,105], [0,0,109], [0,0,113], [0,0,117], [0,0,121], [0,0,125], [0,0,129], [0,0,133], [0,0,137], [0,0,141], [0,0,145], [0,0,149], [0,0,153], [0,0,157], [0,0,161], [0,0,165], [0,0,170], [0,0,174], [0,0,178], [0,0,182], [0,0,186], [0,0,190], [0,0,194], [0,0,198], [0,0,202], [0,0,206], [0,0,210], [0,0,214], [0,0,218], [0,0,222], [0,0,226], [0,0,230], [0,0,234], [0,0,238], [0,0,242], [0,0,246], [0,0,250], [0,0,255], [3,0,251], [7,0,247], [11,0,243], [15,0,239], [19,0,235], [23,0,231], [27,0,227], [31,0,223], [35,0,219], [39,0,215], [43,0,211], [47,0,207], [51,0,203], [55,0,199], [59,0,195], [63,0,191], [67,0,187], [71,0,183], [75,0,179], [79,0,175], [83,0,171], [87,0,167], [91,0,163], [95,0,159], [99,0,155], [103,0,151], [107,0,147], [111,0,143], [115,0,139], [119,0,135], [123,0,131], [127,0,127], [131,0,123], [135,0,119], [139,0,115], [143,0,111], [147,0,107], [151,0,103], [155,0,99], [159,0,95], [163,0,91], [167,0,87], [171,0,83], [175,0,79], [179,0,75], [183,0,71], [187,0,67], [191,0,63], [195,0,59], [199,0,55], [203,0,51], [207,0,47], [211,0,43], [215,0,39], [219,0,35], [223,0,31], [227,0,27], [231,0,23], [235,0,19], [239,0,15], [243,0,11], [247,0,7], [251,0,3], [255,0,0], [255,3,0], [255,7,0], [255,11,0], [255,15,0], [255,19,0], [255,23,0], [255,27,0], [255,31,0], [255,35,0], [255,39,0], [255,43,0], [255,47,0], [255,51,0], [255,55,0], [255,59,0], [255,63,0], [255,67,0], [255,71,0], [255,75,0], [255,79,0], [255,83,0], [255,87,0], [255,91,0], [255,95,0], [255,99,0], [255,103,0], [255,107,0], [255,111,0], [255,115,0], [255,119,0], [255,123,0], [255,127,0], [255,131,0], [255,135,0], [255,139,0], [255,143,0], [255,147,0], [255,151,0], [255,155,0], [255,159,0], [255,163,0], [255,167,0], [255,171,0], [255,175,0], [255,179,0], [255,183,0], [255,187,0], [255,191,0], [255,195,0], [255,199,0], [255,203,0], [255,207,0], [255,211,0], [255,215,0], [255,219,0], [255,223,0], [255,227,0], [255,231,0], [255,235,0], [255,239,0], [255,243,0], [255,247,0], [255,251,0], [255,255,0], [255,255,3], [255,255,7], [255,255,11], [255,255,15], [255,255,19], [255,255,23], [255,255,27], [255,255,31], [255,255,35], [255,255,39], [255,255,43], [255,255,47], [255,255,51], [255,255,55], [255,255,59], [255,255,63], [255,255,67], [255,255,71], [255,255,75], [255,255,79], [255,255,83], [255,255,87], [255,255,91], [255,255,95], [255,255,99], [255,255,103], [255,255,107], [255,255,111], [255,255,115], [255,255,119], [255,255,123], [255,255,127], [255,255,131], [255,255,135], [255,255,139], [255,255,143], [255,255,147], [255,255,151], [255,255,155], [255,255,159], [255,255,163], [255,255,167], [255,255,171], [255,255,175], [255,255,179], [255,255,183], [255,255,187], [255,255,191], [255,255,195], [255,255,199], [255,255,203], [255,255,207], [255,255,211], [255,255,215], [255,255,219], [255,255,223], [255,255,227], [255,255,231], [255,255,235], [255,255,239], [255,255,243], [255,255,247], [255,255,251], [255,255,255]],
                 bbCm: [ [0,0,0], [2,0,0], [4,0,0], [6,0,0], [8,0,0], [10,0,0], [12,0,0], [14,0,0], [16,0,0], [18,0,0], [20,0,0], [22,0,0], [24,0,0], [26,0,0], [28,0,0], [30,0,0], [32,0,0], [34,0,0], [36,0,0], [38,0,0], [40,0,0], [42,0,0], [44,0,0], [46,0,0], [48,0,0], [50,0,0], [52,0,0], [54,0,0], [56,0,0], [58,0,0], [60,0,0], [62,0,0], [64,0,0], [66,0,0], [68,0,0], [70,0,0], [72,0,0], [74,0,0], [76,0,0], [78,0,0], [80,0,0], [82,0,0], [84,0,0], [86,0,0], [88,0,0], [90,0,0], [92,0,0], [94,0,0], [96,0,0], [98,0,0], [100,0,0], [102,0,0], [104,0,0], [106,0,0], [108,0,0], [110,0,0], [112,0,0], [114,0,0], [116,0,0], [118,0,0], [120,0,0], [122,0,0], [124,0,0], [126,0,0], [128,1,0], [130,3,0], [132,5,0], [134,7,0], [136,9,0], [138,11,0], [140,13,0], [142,15,0], [144,17,0], [146,19,0], [148,21,0], [150,23,0], [152,25,0], [154,27,0], [156,29,0], [158,31,0], [160,33,0], [162,35,0], [164,37,0], [166,39,0], [168,41,0], [170,43,0], [172,45,0], [174,47,0], [176,49,0], [178,51,0], [180,53,0], [182,55,0], [184,57,0], [186,59,0], [188,61,0], [190,63,0], [192,65,0], [194,67,0], [196,69,0], [198,71,0], [200,73,0], [202,75,0], [204,77,0], [206,79,0], [208,81,0], [210,83,0], [212,85,0], [214,87,0], [216,89,0], [218,91,0], [220,93,0], [222,95,0], [224,97,0], [226,99,0], [228,101,0], [230,103,0], [232,105,0], [234,107,0], [236,109,0], [238,111,0], [240,113,0], [242,115,0], [244,117,0], [246,119,0], [248,121,0], [250,123,0], [252,125,0], [255,127,0], [255,129,1], [255,131,3], [255,133,5], [255,135,7], [255,137,9], [255,139,11], [255,141,13], [255,143,15], [255,145,17], [255,147,19], [255,149,21], [255,151,23], [255,153,25], [255,155,27], [255,157,29], [255,159,31], [255,161,33], [255,163,35], [255,165,37], [255,167,39], [255,169,41], [255,171,43], [255,173,45], [255,175,47], [255,177,49], [255,179,51], [255,181,53], [255,183,55], [255,185,57], [255,187,59], [255,189,61], [255,191,63], [255,193,65], [255,195,67], [255,197,69], [255,199,71], [255,201,73], [255,203,75], [255,205,77], [255,207,79], [255,209,81], [255,211,83], [255,213,85], [255,215,87], [255,217,89], [255,219,91], [255,221,93], [255,223,95], [255,225,97], [255,227,99], [255,229,101], [255,231,103], [255,233,105], [255,235,107], [255,237,109], [255,239,111], [255,241,113], [255,243,115], [255,245,117], [255,247,119], [255,249,121], [255,251,123], [255,253,125], [255,255,127], [255,255,129], [255,255,131], [255,255,133], [255,255,135], [255,255,137], [255,255,139], [255,255,141], [255,255,143], [255,255,145], [255,255,147], [255,255,149], [255,255,151], [255,255,153], [255,255,155], [255,255,157], [255,255,159], [255,255,161], [255,255,163], [255,255,165], [255,255,167], [255,255,169], [255,255,171], [255,255,173], [255,255,175], [255,255,177], [255,255,179], [255,255,181], [255,255,183], [255,255,185], [255,255,187], [255,255,189], [255,255,191], [255,255,193], [255,255,195], [255,255,197], [255,255,199], [255,255,201], [255,255,203], [255,255,205], [255,255,207], [255,255,209], [255,255,211], [255,255,213], [255,255,215], [255,255,217], [255,255,219], [255,255,221], [255,255,223], [255,255,225], [255,255,227], [255,255,229], [255,255,231], [255,255,233], [255,255,235], [255,255,237], [255,255,239], [255,255,241], [255,255,243], [255,255,245], [255,255,247], [255,255,249], [255,255,251], [255,255,253], [255,255,255]],
@@ -76,23 +297,23 @@ var availableFilters = [
                 redCm: [ [0,0,0], [1,0,0], [2,0,0], [3,0,0], [4,0,0], [5,0,0], [6,0,0], [7,0,0], [8,0,0], [9,0,0], [10,0,0], [11,0,0], [12,0,0], [13,0,0], [14,0,0], [15,0,0], [16,0,0], [17,0,0], [18,0,0], [19,0,0], [20,0,0], [21,0,0], [22,0,0], [23,0,0], [24,0,0], [25,0,0], [26,0,0], [27,0,0], [28,0,0], [29,0,0], [30,0,0], [31,0,0], [32,0,0], [33,0,0], [34,0,0], [35,0,0], [36,0,0], [37,0,0], [38,0,0], [39,0,0], [40,0,0], [41,0,0], [42,0,0], [43,0,0], [44,0,0], [45,0,0], [46,0,0], [47,0,0], [48,0,0], [49,0,0], [50,0,0], [51,0,0], [52,0,0], [53,0,0], [54,0,0], [55,0,0], [56,0,0], [57,0,0], [58,0,0], [59,0,0], [60,0,0], [61,0,0], [62,0,0], [63,0,0], [64,0,0], [65,0,0], [66,0,0], [67,0,0], [68,0,0], [69,0,0], [70,0,0], [71,0,0], [72,0,0], [73,0,0], [74,0,0], [75,0,0], [76,0,0], [77,0,0], [78,0,0], [79,0,0], [80,0,0], [81,0,0], [82,0,0], [83,0,0], [84,0,0], [85,0,0], [86,0,0], [87,0,0], [88,0,0], [89,0,0], [90,0,0], [91,0,0], [92,0,0], [93,0,0], [94,0,0], [95,0,0], [96,0,0], [97,0,0], [98,0,0], [99,0,0], [100,0,0], [101,0,0], [102,0,0], [103,0,0], [104,0,0], [105,0,0], [106,0,0], [107,0,0], [108,0,0], [109,0,0], [110,0,0], [111,0,0], [112,0,0], [113,0,0], [114,0,0], [115,0,0], [116,0,0], [117,0,0], [118,0,0], [119,0,0], [120,0,0], [121,0,0], [122,0,0], [123,0,0], [124,0,0], [125,0,0], [126,0,0], [127,0,0], [128,0,0], [129,0,0], [130,0,0], [131,0,0], [132,0,0], [133,0,0], [134,0,0], [135,0,0], [136,0,0], [137,0,0], [138,0,0], [139,0,0], [140,0,0], [141,0,0], [142,0,0], [143,0,0], [144,0,0], [145,0,0], [146,0,0], [147,0,0], [148,0,0], [149,0,0], [150,0,0], [151,0,0], [152,0,0], [153,0,0], [154,0,0], [155,0,0], [156,0,0], [157,0,0], [158,0,0], [159,0,0], [160,0,0], [161,0,0], [162,0,0], [163,0,0], [164,0,0], [165,0,0], [166,0,0], [167,0,0], [168,0,0], [169,0,0], [170,0,0], [171,0,0], [172,0,0], [173,0,0], [174,0,0], [175,0,0], [176,0,0], [177,0,0], [178,0,0], [179,0,0], [180,0,0], [181,0,0], [182,0,0], [183,0,0], [184,0,0], [185,0,0], [186,0,0], [187,0,0], [188,0,0], [189,0,0], [190,0,0], [191,0,0], [192,0,0], [193,0,0], [194,0,0], [195,0,0], [196,0,0], [197,0,0], [198,0,0], [199,0,0], [200,0,0], [201,0,0], [202,0,0], [203,0,0], [204,0,0], [205,0,0], [206,0,0], [207,0,0], [208,0,0], [209,0,0], [210,0,0], [211,0,0], [212,0,0], [213,0,0], [214,0,0], [215,0,0], [216,0,0], [217,0,0], [218,0,0], [219,0,0], [220,0,0], [221,0,0], [222,0,0], [223,0,0], [224,0,0], [225,0,0], [226,0,0], [227,0,0], [228,0,0], [229,0,0], [230,0,0], [231,0,0], [232,0,0], [233,0,0], [234,0,0], [235,0,0], [236,0,0], [237,0,0], [238,0,0], [239,0,0], [240,0,0], [241,0,0], [242,0,0], [243,0,0], [244,0,0], [245,0,0], [246,0,0], [247,0,0], [248,0,0], [249,0,0], [250,0,0], [251,0,0], [252,0,0], [253,0,0], [254,0,0], [255,0,0]],
                 standardCm: [ [0,0,0], [0,0,3], [1,1,6], [2,2,9], [3,3,12], [4,4,15], [5,5,18], [6,6,21], [7,7,24], [8,8,27], [9,9,30], [10,10,33], [10,10,36], [11,11,39], [12,12,42], [13,13,45], [14,14,48], [15,15,51], [16,16,54], [17,17,57], [18,18,60], [19,19,63], [20,20,66], [20,20,69], [21,21,72], [22,22,75], [23,23,78], [24,24,81], [25,25,85], [26,26,88], [27,27,91], [28,28,94], [29,29,97], [30,30,100], [30,30,103], [31,31,106], [32,32,109], [33,33,112], [34,34,115], [35,35,118], [36,36,121], [37,37,124], [38,38,127], [39,39,130], [40,40,133], [40,40,136], [41,41,139], [42,42,142], [43,43,145], [44,44,148], [45,45,151], [46,46,154], [47,47,157], [48,48,160], [49,49,163], [50,50,166], [51,51,170], [51,51,173], [52,52,176], [53,53,179], [54,54,182], [55,55,185], [56,56,188], [57,57,191], [58,58,194], [59,59,197], [60,60,200], [61,61,203], [61,61,206], [62,62,209], [63,63,212], [64,64,215], [65,65,218], [66,66,221], [67,67,224], [68,68,227], [69,69,230], [70,70,233], [71,71,236], [71,71,239], [72,72,242], [73,73,245], [74,74,248], [75,75,251], [76,76,255], [0,78,0], [1,80,1], [2,82,2], [3,84,3], [4,87,4], [5,89,5], [6,91,6], [7,93,7], [8,95,8], [9,97,9], [9,99,9], [10,101,10], [11,103,11], [12,105,12], [13,108,13], [14,110,14], [15,112,15], [16,114,16], [17,116,17], [18,118,18], [18,120,18], [19,122,19], [20,124,20], [21,126,21], [22,129,22], [23,131,23], [24,133,24], [25,135,25], [26,137,26], [27,139,27], [27,141,27], [28,143,28], [29,145,29], [30,147,30], [31,150,31], [32,152,32], [33,154,33], [34,156,34], [35,158,35], [36,160,36], [36,162,36], [37,164,37], [38,166,38], [39,168,39], [40,171,40], [41,173,41], [42,175,42], [43,177,43], [44,179,44], [45,181,45], [45,183,45], [46,185,46], [47,187,47], [48,189,48], [49,192,49], [50,194,50], [51,196,51], [52,198,52], [53,200,53], [54,202,54], [54,204,54], [55,206,55], [56,208,56], [57,210,57], [58,213,58], [59,215,59], [60,217,60], [61,219,61], [62,221,62], [63,223,63], [63,225,63], [64,227,64], [65,229,65], [66,231,66], [67,234,67], [68,236,68], [69,238,69], [70,240,70], [71,242,71], [72,244,72], [72,246,72], [73,248,73], [74,250,74], [75,252,75], [76,255,76], [78,0,0], [80,1,1], [82,2,2], [84,3,3], [86,4,4], [88,5,5], [91,6,6], [93,7,7], [95,8,8], [97,8,8], [99,9,9], [101,10,10], [103,11,11], [105,12,12], [107,13,13], [109,14,14], [111,15,15], [113,16,16], [115,16,16], [118,17,17], [120,18,18], [122,19,19], [124,20,20], [126,21,21], [128,22,22], [130,23,23], [132,24,24], [134,24,24], [136,25,25], [138,26,26], [140,27,27], [142,28,28], [144,29,29], [147,30,30], [149,31,31], [151,32,32], [153,32,32], [155,33,33], [157,34,34], [159,35,35], [161,36,36], [163,37,37], [165,38,38], [167,39,39], [169,40,40], [171,40,40], [174,41,41], [176,42,42], [178,43,43], [180,44,44], [182,45,45], [184,46,46], [186,47,47], [188,48,48], [190,48,48], [192,49,49], [194,50,50], [196,51,51], [198,52,52], [201,53,53], [203,54,54], [205,55,55], [207,56,56], [209,56,56], [211,57,57], [213,58,58], [215,59,59], [217,60,60], [219,61,61], [221,62,62], [223,63,63], [225,64,64], [228,64,64], [230,65,65], [232,66,66], [234,67,67], [236,68,68], [238,69,69], [240,70,70], [242,71,71], [244,72,72], [246,72,72], [248,73,73], [250,74,74], [252,75,75], [255,76,76]]
             };
-            var cmapOptions = '';
+            let cmapOptions = '';
             Object.keys(cmaps).forEach(function(c) {
                 cmapOptions += '<option value="' + c + '">' + c + '</option>';
             });
-            var $html = $('<div>' +
+            const $html = $('<div>' +
                 '        Colormap: <select id="cmapSelect">' + cmapOptions +
                 '        </select><br>' +
                 '        Center: <span id="cmapCenter"></span>' +
                 '</div>');
-            var cmapUpdate = function() {
-                var val = $('#cmapSelect').val();
+            const cmapUpdate = function() {
+                const val = $('#cmapSelect').val();
                 $('#cmapSelect').change(function() {
                     updateCallback(val);
                 });
                 return cmaps[val];
             };
-            var spinnerSlider = new SpinnerSlider({
+            const spinnerSlider = new Spinner({
                 $element: $html.find('#cmapCenter'),
                 init: 128,
                 min: 1,
@@ -106,10 +327,8 @@ var availableFilters = [
                     return spinnerSlider.getValue();
                 },
                 getFilter: function() {
-                    /*eslint new-cap: 0*/
                     return OpenSeadragon.Filters.COLORMAP(cmapUpdate(), spinnerSlider.getValue());
-                },
-                sync: true
+                }
             };
         }
     }, {
@@ -119,12 +338,12 @@ var availableFilters = [
             'image shift towards the given adjustment color.' +
             'Color values are between 0 to 255',
         generate: function(updateCallback) {
-            var redSpinnerId = 'redSpinner-' + idIncrement;
-            var greenSpinnerId = 'greenSpinner-' + idIncrement;
-            var blueSpinnerId = 'blueSpinner-' + idIncrement;
-            var strengthSpinnerId = 'strengthSpinner-' + idIncrement;
+            const redSpinnerId = 'redSpinner-' + idIncrement;
+            const greenSpinnerId = 'greenSpinner-' + idIncrement;
+            const blueSpinnerId = 'blueSpinner-' + idIncrement;
+            const strengthSpinnerId = 'strengthSpinner-' + idIncrement;
             /*eslint max-len: 0*/
-            var $html = $('<div class="wdzt-table-layout">' +
+            const $html = $('<div class="wdzt-table-layout">' +
                 '<div class="wdzt-row-layout">' +
                 '    <div class="wdzt-cell-layout">' +
                 '        Red: <span id="' + redSpinnerId + '"></span>' +
@@ -140,7 +359,7 @@ var availableFilters = [
                 '    </div>' +
                 '</div>' +
                 '</div>');
-            var redSpinner = new Spinner({
+            const redSpinner = new Spinner({
                 $element: $html.find('#' + redSpinnerId),
                 init: 100,
                 min: 0,
@@ -148,7 +367,7 @@ var availableFilters = [
                 step: 1,
                 updateCallback: updateCallback
             });
-            var greenSpinner = new Spinner({
+            const greenSpinner = new Spinner({
                 $element: $html.find('#' + greenSpinnerId),
                 init: 20,
                 min: 0,
@@ -156,7 +375,7 @@ var availableFilters = [
                 step: 1,
                 updateCallback: updateCallback
             });
-            var blueSpinner = new Spinner({
+            const blueSpinner = new Spinner({
                 $element: $html.find('#' + blueSpinnerId),
                 init: 20,
                 min: 0,
@@ -164,7 +383,7 @@ var availableFilters = [
                 step: 1,
                 updateCallback: updateCallback
             });
-            var strengthSpinner = new Spinner({
+            const strengthSpinner = new Spinner({
                 $element: $html.find('#' + strengthSpinnerId),
                 init: 50,
                 min: 0,
@@ -175,23 +394,25 @@ var availableFilters = [
             return {
                 html: $html,
                 getParams: function() {
-                    var red = redSpinner.getValue();
-                    var green = greenSpinner.getValue();
-                    var blue = blueSpinner.getValue();
-                    var strength = strengthSpinner.getValue();
+                    const red = redSpinner.getValue();
+                    const green = greenSpinner.getValue();
+                    const blue = blueSpinner.getValue();
+                    const strength = strengthSpinner.getValue();
                     return 'R: ' + red + ' G: ' + green + ' B: ' + blue +
                         ' S: ' + strength;
                 },
                 getFilter: function() {
-                    var red = redSpinner.getValue();
-                    var green = greenSpinner.getValue();
-                    var blue = blueSpinner.getValue();
-                    var strength = strengthSpinner.getValue();
-                    return function(context, callback) {
-                        caman(context.canvas, function() {
+                    const red = redSpinner.getValue();
+                    const green = greenSpinner.getValue();
+                    const blue = blueSpinner.getValue();
+                    const strength = strengthSpinner.getValue();
+                    return function(context) {
+                        const promise = getPromiseResolver();
+                        Caman(context.canvas, function() {
                             this.colorize(red, green, blue, strength);
-                            this.render(callback);
+                            this.render(promise.call.back);
                         });
+                        return promise.promise;
                     };
                 }
             };
@@ -202,8 +423,8 @@ var availableFilters = [
             'to 4 or 5. Values between 0 and 1 will lessen the contrast ' +
             'while values greater than 1 will increase it.',
         generate: function(updateCallback) {
-            var $html = $('<div></div>');
-            var spinnerSlider = new SpinnerSlider({
+            const $html = $('<div></div>');
+            const spinnerSlider = new SpinnerSlider({
                 $element: $html,
                 init: 1.3,
                 min: 0,
@@ -219,8 +440,7 @@ var availableFilters = [
                 getFilter: function() {
                     return OpenSeadragon.Filters.CONTRAST(
                         spinnerSlider.getValue());
-                },
-                sync: true
+                }
             };
         }
     }, {
@@ -228,8 +448,8 @@ var availableFilters = [
         help: 'Range is -100 to 100. Values < 0 will decrease ' +
             'exposure while values > 0 will increase exposure',
         generate: function(updateCallback) {
-            var $html = $('<div></div>');
-            var spinnerSlider = new SpinnerSlider({
+            const $html = $('<div></div>');
+            const spinnerSlider = new SpinnerSlider({
                 $element: $html,
                 init: 10,
                 min: -100,
@@ -243,12 +463,14 @@ var availableFilters = [
                     return spinnerSlider.getValue();
                 },
                 getFilter: function() {
-                    var value = spinnerSlider.getValue();
-                    return function(context, callback) {
-                        caman(context.canvas, function() {
+                    const value = spinnerSlider.getValue();
+                    return function(context) {
+                        const promise = getPromiseResolver();
+                        Caman(context.canvas, function() {
                             this.exposure(value);
-                            this.render(callback); // don't forget to call the callback.
+                            this.render(promise.call.back);
                         });
+                        return promise.promise;
                     };
                 }
             };
@@ -259,8 +481,8 @@ var availableFilters = [
             'are from 0 to 4 or 5. Values between 0 and 1 will ' +
             'lessen the contrast while values greater than 1 will increase it.',
         generate: function(updateCallback) {
-            var $html = $('<div></div>');
-            var spinnerSlider = new SpinnerSlider({
+            const $html = $('<div></div>');
+            const spinnerSlider = new SpinnerSlider({
                 $element: $html,
                 init: 0.5,
                 min: 0,
@@ -274,7 +496,7 @@ var availableFilters = [
                     return spinnerSlider.getValue();
                 },
                 getFilter: function() {
-                    var value = spinnerSlider.getValue();
+                    const value = spinnerSlider.getValue();
                     return OpenSeadragon.Filters.GAMMA(value);
                 }
             };
@@ -284,8 +506,8 @@ var availableFilters = [
         help: 'hue value is between 0 to 100 representing the ' +
             'percentage of Hue shift in the 0 to 360 range',
         generate: function(updateCallback) {
-            var $html = $('<div></div>');
-            var spinnerSlider = new SpinnerSlider({
+            const $html = $('<div></div>');
+            const spinnerSlider = new SpinnerSlider({
                 $element: $html,
                 init: 20,
                 min: 0,
@@ -299,12 +521,14 @@ var availableFilters = [
                     return spinnerSlider.getValue();
                 },
                 getFilter: function() {
-                    var value = spinnerSlider.getValue();
-                    return function(context, callback) {
-                        caman(context.canvas, function() {
+                    const value = spinnerSlider.getValue();
+                    return function(context) {
+                        const promise = getPromiseResolver();
+                        Caman(context.canvas, function() {
                             this.hue(value);
-                            this.render(callback); // don't forget to call the callback.
+                            this.render(promise.call.back);
                         });
+                        return promise.promise;
                     };
                 }
             };
@@ -313,8 +537,8 @@ var availableFilters = [
         name: 'Saturation',
         help: 'saturation value has to be between -100 and 100',
         generate: function(updateCallback) {
-            var $html = $('<div></div>');
-            var spinnerSlider = new SpinnerSlider({
+            const $html = $('<div></div>');
+            const spinnerSlider = new SpinnerSlider({
                 $element: $html,
                 init: 50,
                 min: -100,
@@ -328,12 +552,14 @@ var availableFilters = [
                     return spinnerSlider.getValue();
                 },
                 getFilter: function() {
-                    var value = spinnerSlider.getValue();
-                    return function(context, callback) {
-                        caman(context.canvas, function() {
+                    const value = spinnerSlider.getValue();
+                    return function(context) {
+                        const promise = getPromiseResolver();
+                        Caman(context.canvas, function() {
                             this.saturation(value);
-                            this.render(callback); // don't forget to call the callback.
+                            this.render(promise.call.back);
                         });
+                        return promise.promise;
                     };
                 }
             };
@@ -342,8 +568,8 @@ var availableFilters = [
         name: 'Vibrance',
         help: 'vibrance value has to be between -100 and 100',
         generate: function(updateCallback) {
-            var $html = $('<div></div>');
-            var spinnerSlider = new SpinnerSlider({
+            const $html = $('<div></div>');
+            const spinnerSlider = new SpinnerSlider({
                 $element: $html,
                 init: 50,
                 min: -100,
@@ -357,12 +583,14 @@ var availableFilters = [
                     return spinnerSlider.getValue();
                 },
                 getFilter: function() {
-                    var value = spinnerSlider.getValue();
-                    return function(context, callback) {
-                        caman(context.canvas, function() {
+                    const value = spinnerSlider.getValue();
+                    return function(context) {
+                        const promise = getPromiseResolver();
+                        Caman(context.canvas, function() {
                             this.vibrance(value);
-                            this.render(callback); // don't forget to call the callback.
+                            this.render(promise.call.back);
                         });
+                        return promise.promise;
                     };
                 }
             };
@@ -371,8 +599,8 @@ var availableFilters = [
         name: 'Sepia',
         help: 'sepia value has to be between 0 and 100',
         generate: function(updateCallback) {
-            var $html = $('<div></div>');
-            var spinnerSlider = new SpinnerSlider({
+            const $html = $('<div></div>');
+            const spinnerSlider = new SpinnerSlider({
                 $element: $html,
                 init: 50,
                 min: 0,
@@ -386,12 +614,14 @@ var availableFilters = [
                     return spinnerSlider.getValue();
                 },
                 getFilter: function() {
-                    var value = spinnerSlider.getValue();
-                    return function(context, callback) {
-                        caman(context.canvas, function() {
+                    const value = spinnerSlider.getValue();
+                    return function(context) {
+                        const promise = getPromiseResolver();
+                        Caman(context.canvas, function() {
                             this.sepia(value);
-                            this.render(callback); // don't forget to call the callback.
+                            this.render(promise.call.back);
                         });
+                        return promise.promise;
                     };
                 }
             };
@@ -400,8 +630,8 @@ var availableFilters = [
         name: 'Noise',
         help: 'Noise cannot be smaller than 0',
         generate: function(updateCallback) {
-            var $html = $('<div></div>');
-            var spinnerSlider = new SpinnerSlider({
+            const $html = $('<div></div>');
+            const spinnerSlider = new SpinnerSlider({
                 $element: $html,
                 init: 50,
                 min: 0,
@@ -414,12 +644,14 @@ var availableFilters = [
                     return spinnerSlider.getValue();
                 },
                 getFilter: function() {
-                    var value = spinnerSlider.getValue();
-                    return function(context, callback) {
-                        caman(context.canvas, function() {
+                    const value = spinnerSlider.getValue();
+                    return function(context) {
+                        const promise = getPromiseResolver();
+                        Caman(context.canvas, function() {
                             this.noise(value);
-                            this.render(callback); // don't forget to call the callback.
+                            this.render(promise.call.back);
                         });
+                        return promise.promise;
                     };
                 }
             };
@@ -434,8 +666,7 @@ var availableFilters = [
                 },
                 getFilter: function() {
                     return OpenSeadragon.Filters.GREYSCALE();
-                },
-                sync: true
+                }
             };
         }
     }, {
@@ -447,18 +678,17 @@ var availableFilters = [
                     return '';
                 },
                 getFilter: function() {
-                    return function(context, callback) {
-                        var imgData = context.getImageData(
+                    return function(context) {
+                        const imgData = context.getImageData(
                             0, 0, context.canvas.width, context.canvas.height);
-                        var pixels = imgData.data;
-                        var originalPixels = context.getImageData(0, 0, context.canvas.width, context.canvas.height).data;
-                        var oneRowOffset = context.canvas.width * 4;
-                        var onePixelOffset = 4;
-                        var Gy, Gx;
-                        var idx = 0;
-                        for (var i = 1; i < context.canvas.height - 1; i += 1) {
+                        const pixels = imgData.data;
+                        const originalPixels = context.getImageData(0, 0, context.canvas.width, context.canvas.height).data;
+                        const oneRowOffset = context.canvas.width * 4;
+                        const onePixelOffset = 4;
+                        let Gy, Gx, idx = 0;
+                        for (let i = 1; i < context.canvas.height - 1; i += 1) {
                             idx = oneRowOffset * i + 4;
-                            for (var j = 1; j < context.canvas.width - 1; j += 1) {
+                            for (let j = 1; j < context.canvas.width - 1; j += 1) {
                                 Gy = originalPixels[idx - onePixelOffset + oneRowOffset] + 2 * originalPixels[idx + oneRowOffset] + originalPixels[idx + onePixelOffset + oneRowOffset];
                                 Gy = Gy - (originalPixels[idx - onePixelOffset - oneRowOffset] + 2 * originalPixels[idx - oneRowOffset] + originalPixels[idx + onePixelOffset - oneRowOffset]);
                                 Gx = originalPixels[idx + onePixelOffset - oneRowOffset] + 2 * originalPixels[idx + onePixelOffset] + originalPixels[idx + onePixelOffset + oneRowOffset];
@@ -470,7 +700,6 @@ var availableFilters = [
                             }
                         }
                         context.putImageData(imgData, 0, 0);
-                        callback();
                     };
                 }
             };
@@ -479,8 +708,8 @@ var availableFilters = [
         name: 'Brightness',
         help: 'Brightness must be between -255 (darker) and 255 (brighter).',
         generate: function(updateCallback) {
-            var $html = $('<div></div>');
-            var spinnerSlider = new SpinnerSlider({
+            const $html = $('<div></div>');
+            const spinnerSlider = new SpinnerSlider({
                 $element: $html,
                 init: 50,
                 min: -255,
@@ -496,16 +725,15 @@ var availableFilters = [
                 getFilter: function() {
                     return OpenSeadragon.Filters.BRIGHTNESS(
                         spinnerSlider.getValue());
-                },
-                sync: true
+                }
             };
         }
     }, {
         name: 'Erosion',
         help: 'The erosion kernel size must be an odd number.',
         generate: function(updateCallback) {
-            var $html = $('<div></div>');
-            var spinner = new Spinner({
+            const $html = $('<div></div>');
+            const spinner = new Spinner({
                 $element: $html,
                 init: 3,
                 min: 3,
@@ -527,8 +755,8 @@ var availableFilters = [
         name: 'Dilation',
         help: 'The dilation kernel size must be an odd number.',
         generate: function(updateCallback) {
-            var $html = $('<div></div>');
-            var spinner = new Spinner({
+            const $html = $('<div></div>');
+            const spinner = new Spinner({
                 $element: $html,
                 init: 3,
                 min: 3,
@@ -550,8 +778,8 @@ var availableFilters = [
         name: 'Thresholding',
         help: 'The threshold must be between 0 and 255.',
         generate: function(updateCallback) {
-            var $html = $('<div></div>');
-            var spinnerSlider = new SpinnerSlider({
+            const $html = $('<div></div>');
+            const spinnerSlider = new SpinnerSlider({
                 $element: $html,
                 init: 127,
                 min: 0,
@@ -567,8 +795,7 @@ var availableFilters = [
                 getFilter: function() {
                     return OpenSeadragon.Filters.THRESHOLDING(
                         spinnerSlider.getValue());
-                },
-                sync: true
+                }
             };
         }
     }];
@@ -576,35 +803,34 @@ availableFilters.sort(function(f1, f2) {
     return f1.name.localeCompare(f2.name);
 });
 
-var idIncrement = 0;
-var hashTable = {};
+let idIncrement = 0;
+const hashTable = {};
 
 availableFilters.forEach(function(filter) {
-    var $li = $('<li></li>');
-    var $plus = $('<img src="images/plus.png" alt="+" class="button">');
+    const $li = $('<li></li>');
+    const $plus = $('<img src="static/plus.png" alt="+" class="button">');
     $li.append($plus);
     $li.append(filter.name);
     $li.appendTo($('#available'));
     $plus.click(function() {
-        var id = 'selected_' + idIncrement++;
-        var generatedFilter = filter.generate(updateFilters);
+        const id = 'selected_' + idIncrement++;
+        const generatedFilter = filter.generate(updateFilters);
         hashTable[id] = {
             name: filter.name,
             generatedFilter: generatedFilter
         };
-        var $li = $('<li id="' + id + '"><div class="wdzt-table-layout"><div class="wdzt-row-layout"></div></div></li>');
-        var $minus = $('<div class="wdzt-cell-layout"><img src="images/minus.png" alt="-" class="button"></div>');
+        const $li = $('<li id="' + id + '"><div class="wdzt-table-layout"><div class="wdzt-row-layout"></div></div></li>');
+        const $minus = $('<div class="wdzt-cell-layout"><img src="static/minus.png" alt="-" class="button"></div>');
         $li.find('.wdzt-row-layout').append($minus);
         $li.find('.wdzt-row-layout').append('<div class="wdzt-cell-layout filterLabel">' + filter.name + '</div>');
         if (filter.help) {
-            var $help = $('<div class="wdzt-cell-layout"><img src="images/help-browser-2.png" alt="help" title="' +
-                filter.help + '"></div>');
+            const $help = $('<div class="wdzt-cell-layout"><span title="' + filter.help + '">&nbsp;?&emsp;</span></div>');
             $help.tooltip();
             $li.find('.wdzt-row-layout').append($help);
         }
         $li.find('.wdzt-row-layout').append(
             $('<div class="wdzt-cell-layout wdzt-full-width"></div>')
-            .append(generatedFilter.html));
+                .append(generatedFilter.html));
         $minus.click(function() {
             delete hashTable[id];
             $li.remove();
@@ -622,20 +848,102 @@ $('#selected').sortable({
     update: updateFilters
 });
 
+/**
+ *
+ */
+function getPromiseResolver() {
+    let call = {};
+    let promise = new OpenSeadragon.Promise(resolve => {
+        call.back = resolve;
+    });
+    return {call, promise};
+}
+
+/**
+ *
+ */
 function updateFilters() {
-    var filters = [];
-    var sync = true;
+    const filters = [];
     $('#selected li').each(function() {
-        var id = this.id;
-        var filter = hashTable[id];
+        const id = this.id;
+        const filter = hashTable[id];
         filters.push(filter.generatedFilter.getFilter());
-        sync &= filter.generatedFilter.sync;
     });
     viewer.setFilterOptions({
         filters: {
             processors: filters
-        },
-        loadMode: sync ? 'sync' : 'async'
+        }
     });
 }
 
+window.debugCache = function () {
+    for (let cacheKey in viewer.tileCache._cachesLoaded) {
+        let cache = viewer.tileCache._cachesLoaded[cacheKey];
+        if (!cache.loaded) {
+            console.log(cacheKey, "skipping...");
+        }
+        if (cache.type === "context2d") {
+            console.log(cacheKey, cache.data.canvas.width, cache.data.canvas.height);
+        } else {
+            console.log(cacheKey, cache.data);
+        }
+    }
+}
+
+
+// Monitoring of tiles:
+let monitoredTile = null;
+/**
+ *
+ */
+async function updateCanvas(node, tile, targetCacheKey) {
+    const data = await tile.getCache(targetCacheKey)?.getDataAs('context2d', true);
+    if (!data) {
+        const text = document.createElement("span");
+        text.innerHTML = targetCacheKey + "<br> empty";
+        node.replaceChildren(text);
+    } else {
+        node.replaceChildren(data.canvas);
+    }
+}
+/**
+ *
+ */
+async function processTile(tile) {
+    console.log("Selected tile", tile);
+    await Promise.all([
+        updateCanvas(document.getElementById("tile-original"), tile, tile.originalCacheKey),
+        updateCanvas(document.getElementById("tile-main"), tile, tile.cacheKey),
+    ]);
+}
+viewer.addHandler('tile-invalidated', async event => {
+    if (event.tile === monitoredTile) {
+        await processTile(monitoredTile);
+    }
+}, null, -Infinity); // as a last handler
+
+// When testing code, you can call in OSD $.debugTile(message,  tile) and it will log only for selected tiles on the canvas
+OpenSeadragon.debugTile = function (msg, t) {
+    if (monitoredTile && monitoredTile.x === t.x && monitoredTile.y === t.y && monitoredTile.level === t.level) {
+        console.log(msg, t);
+    }
+}
+
+viewer.addHandler("canvas-release", e => {
+    const tiledImage = viewer.world.getItemAt(viewer.world.getItemCount()-1);
+    if (!tiledImage) {
+        monitoredTile = null;
+        return;
+    }
+
+    const position = viewer.viewport.windowToViewportCoordinates(e.position);
+
+    let tiles = tiledImage._lastDrawn;
+    for (let i = 0; i < tiles.length; i++) {
+        if (tiles[i].tile.bounds.containsPoint(position)) {
+            monitoredTile = tiles[i].tile;
+            return processTile(monitoredTile);
+        }
+    }
+    monitoredTile = null;
+});

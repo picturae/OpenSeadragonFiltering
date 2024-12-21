@@ -1,9 +1,7 @@
 This [OpenSeadragon](http://openseadragon.github.io/) plugin provides
-the capability to add filters to the images.
+the capability to add filters to the images. 
 
-A demo is available [here](https://pages.nist.gov/OpenSeadragonFiltering/).
-
-This plugin requires OpenSeadragon 2.1+.
+This plugin requires OpenSeadragon 6+.
 
 ### Basic usage
 
@@ -258,7 +256,8 @@ filters are good examples for such implementations.
 
 This plugin is working on tiles and does not currently handle tiles edges.
 This means that if you are using kernel based filters, you should expect
-edge effects around tiles.
+edge effects around tiles. Moreover, it is not an optimal usage scenario for
+all drawers (e.g. WebGL), optional performance choice is 'canvas'.
 
 ### Build the demo
 
@@ -267,7 +266,9 @@ The result of the build will be in the `dist` folder.
 
 ### Disclaimer:
 
-This software was developed at the National Institute of Standards and
+Maintained by RationAI.
+
+This software was originally developed at the National Institute of Standards and
 Technology by employees of the Federal Government in the course of
 their official duties. Pursuant to title 17 Section 105 of the United
 States Code this software is not subject to copyright protection and is

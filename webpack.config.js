@@ -1,88 +1,59 @@
-var webpack = require('webpack');
-var path = require('path');
-var CopyWebpackPlugin = require('copy-webpack-plugin');
+const path = require('path');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
+const EslintWebpackPlugin = require('eslint-webpack-plugin');
+const webpack = require('webpack');
 
 module.exports = {
-    mode: "development",
+    mode: 'development',
     context: __dirname,
     entry: ['./demo/demo.js'],
+    target: 'web',
     output: {
         filename: 'demo-bundle.js',
         path: path.resolve(__dirname, 'dist'),
-        publicPath:'dist/'
+        publicPath: 'dist/'
     },
     module: {
         rules: [
             {
-                test: /\.js$/,
-                enforce: "pre",
-                loader: 'eslint-loader',
-                exclude: /node_modules/,
-                options: {
-                    configFile: '.eslintrc.json'
+                test: /\.(jpe?g|png|gif)$/i,
+                type: 'asset/resource',
+                generator: {
+                    filename: 'images/[name][ext]'
                 }
             },
             {
-                test: /\.(jpe?g|png|gif)$/i,
-                loader: 'file-loader',
-                query: {
-                    name: '[name].[ext]',
-                    outputPath: 'images/'
-                },
-            },
-            {
-				test: /\.css$/,
-                include: /node_modules/,
-                use: ['style-loader', 'css-loader']
-            },
-            {
                 test: /\.css$/,
-                exclude: /node_modules/,
-                use: ['style-loader', 'css-loader']
+                use: ['style-loader', 'css-loader'],
             }
         ]
     },
     resolve: {
-        // options for resolving module requests
-        // (does not apply to resolving to loaders)
         modules: [
-            "node_modules",
-            path.join(__dirname, "demo")
+            'node_modules',
+            path.join(__dirname, 'demo')
         ],
-        // directories where to look for modules
-        extensions: [".js", ".json", ".jsx", ".css"]
+        extensions: ['.js', '.json', '.jsx', '.css']
     },
     plugins: [
-        new CopyWebpackPlugin([{
-            from: 'node_modules/openseadragon/build/openseadragon/images',
-            to: 'images'
-        }, {
-            from: 'demo/images',
-            to: 'images'
-        }, {
-            from: 'demo/static',
-            to: 'static'
-        }, {
-            from: 'demo/*'
-        }
-        ]),
-        new webpack.LoaderOptionsPlugin({
-            test: /\.js$/,
-            context: __dirname,
-            debug: true,
-            options: {
-                eslint: {
-                    configFile: '.eslintrc.json'
-                }
-            }
+        new CopyWebpackPlugin({
+            patterns: [
+                { from: 'node_modules/openseadragon/build/openseadragon/images', to: 'images' },
+                { from: 'demo/images', to: 'images' },
+                { from: 'demo/*', to: 'demo' }
+            ]
         }),
-        new webpack.ProvidePlugin(
-            {
-                $: 'jquery',
-                jQuery: 'jquery',
-                'window.jQuery': 'jquery',
-                'window.$': 'jquery'
-            }
-        )
+        new webpack.ProvidePlugin({
+            $: 'jquery',
+            jQuery: 'jquery',
+            'window.jQuery': 'jquery',
+            'window.$': 'jquery'
+        }),
+        // new EslintWebpackPlugin({
+        //     extensions: ['js'],
+        //     context: path.resolve(__dirname, 'demo'),
+        //     overrideConfigFile: path.resolve(__dirname, 'eslint.config.js'),
+        //     files: '**/*.js',
+        // })
     ]
 };
