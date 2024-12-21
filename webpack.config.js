@@ -33,6 +33,9 @@ module.exports = {
             'node_modules',
             path.join(__dirname, 'demo')
         ],
+        alias: {
+            openseadragon: path.resolve(__dirname, 'node_modules/openseadragon'),
+        },
         extensions: ['.js', '.json', '.jsx', '.css']
     },
     plugins: [
@@ -40,7 +43,8 @@ module.exports = {
             patterns: [
                 { from: 'node_modules/openseadragon/build/openseadragon/images', to: 'images' },
                 { from: 'demo/images', to: 'images' },
-                { from: 'demo/*', to: 'demo' }
+                { from: 'demo/index.html', to: 'index.html' },
+                { from: 'demo/style.css', to: 'style.css' },
             ]
         }),
         new webpack.ProvidePlugin({

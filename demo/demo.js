@@ -9,6 +9,16 @@
  * @author Antoine Vandecreme <antoine.vandecreme@nist.gov>
  */
 
+import $ from 'jquery';
+import 'jquery-ui/ui/widgets/sortable';
+import 'jquery-ui/ui/widgets/slider';
+import 'jquery-ui/ui/widgets/spinner';
+import 'jquery-ui/ui/widgets/tooltip';
+import 'jquery-ui-dist/jquery-ui.css';
+
+import '../openseadragon-filtering'
+// import {default as OpenSeadragon} from 'openseadragon';
+
 /**
  * This class is an improvement over the basic jQuery spinner to support
  * 'Enter' to update the value (with validity checks).
@@ -236,7 +246,7 @@ const url = new window.URL(window.location);
 const targetSource = url.searchParams.get("image") || Object.values(sources)[0];
 const viewer = window.viewer = new OpenSeadragon({
     id: 'openseadragon',
-    prefixUrl: '/build/openseadragon/images/',
+    prefixUrl: 'images/',
     tileSources: targetSource,
     crossOriginPolicy: 'Anonymous',
     drawer: switcher.activeImplementation("drawer"),
@@ -808,7 +818,7 @@ const hashTable = {};
 
 availableFilters.forEach(function(filter) {
     const $li = $('<li></li>');
-    const $plus = $('<img src="static/plus.png" alt="+" class="button">');
+    const $plus = $('<img src="images/plus.png" alt="+" class="button">');
     $li.append($plus);
     $li.append(filter.name);
     $li.appendTo($('#available'));
@@ -820,7 +830,7 @@ availableFilters.forEach(function(filter) {
             generatedFilter: generatedFilter
         };
         const $li = $('<li id="' + id + '"><div class="wdzt-table-layout"><div class="wdzt-row-layout"></div></div></li>');
-        const $minus = $('<div class="wdzt-cell-layout"><img src="static/minus.png" alt="-" class="button"></div>');
+        const $minus = $('<div class="wdzt-cell-layout"><img src="images/minus.png" alt="-" class="button"></div>');
         $li.find('.wdzt-row-layout').append($minus);
         $li.find('.wdzt-row-layout').append('<div class="wdzt-cell-layout filterLabel">' + filter.name + '</div>');
         if (filter.help) {
@@ -875,75 +885,3 @@ function updateFilters() {
         }
     });
 }
-
-window.debugCache = function () {
-    for (let cacheKey in viewer.tileCache._cachesLoaded) {
-        let cache = viewer.tileCache._cachesLoaded[cacheKey];
-        if (!cache.loaded) {
-            console.log(cacheKey, "skipping...");
-        }
-        if (cache.type === "context2d") {
-            console.log(cacheKey, cache.data.canvas.width, cache.data.canvas.height);
-        } else {
-            console.log(cacheKey, cache.data);
-        }
-    }
-}
-
-
-// Monitoring of tiles:
-let monitoredTile = null;
-/**
- *
- */
-async function updateCanvas(node, tile, targetCacheKey) {
-    const data = await tile.getCache(targetCacheKey)?.getDataAs('context2d', true);
-    if (!data) {
-        const text = document.createElement("span");
-        text.innerHTML = targetCacheKey + "<br> empty";
-        node.replaceChildren(text);
-    } else {
-        node.replaceChildren(data.canvas);
-    }
-}
-/**
- *
- */
-async function processTile(tile) {
-    console.log("Selected tile", tile);
-    await Promise.all([
-        updateCanvas(document.getElementById("tile-original"), tile, tile.originalCacheKey),
-        updateCanvas(document.getElementById("tile-main"), tile, tile.cacheKey),
-    ]);
-}
-viewer.addHandler('tile-invalidated', async event => {
-    if (event.tile === monitoredTile) {
-        await processTile(monitoredTile);
-    }
-}, null, -Infinity); // as a last handler
-
-// When testing code, you can call in OSD $.debugTile(message,  tile) and it will log only for selected tiles on the canvas
-OpenSeadragon.debugTile = function (msg, t) {
-    if (monitoredTile && monitoredTile.x === t.x && monitoredTile.y === t.y && monitoredTile.level === t.level) {
-        console.log(msg, t);
-    }
-}
-
-viewer.addHandler("canvas-release", e => {
-    const tiledImage = viewer.world.getItemAt(viewer.world.getItemCount()-1);
-    if (!tiledImage) {
-        monitoredTile = null;
-        return;
-    }
-
-    const position = viewer.viewport.windowToViewportCoordinates(e.position);
-
-    let tiles = tiledImage._lastDrawn;
-    for (let i = 0; i < tiles.length; i++) {
-        if (tiles[i].tile.bounds.containsPoint(position)) {
-            monitoredTile = tiles[i].tile;
-            return processTile(monitoredTile);
-        }
-    }
-    monitoredTile = null;
-});

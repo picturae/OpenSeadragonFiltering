@@ -24,6 +24,8 @@
   "homepage": "https://github.com/usnistgov/OpenSeadragonFiltering#readme",
   "dependencies": {
     "eslint-webpack-plugin": "^4.2.0",
+    "jquery-ui": "^1.14.1",
+    "jquery-ui-dist": "^1.13.3",
     "openseadragon": ">=5.0"
   },
   "devDependencies": {
