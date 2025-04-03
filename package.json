@@ -1,6 +1,6 @@
 {
   "name": "openseadragon-filtering",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "OpenSeadragon plugin providing filtering capabilities to the images.",
   "main": "openseadragon-filtering.js",
   "repository": {
